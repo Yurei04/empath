@@ -9,14 +9,23 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@huggingface/inference": "^4.13.5",
+    "@supabase/supabase-js": "^2.87.1",
+    "bad-words": "^4.0.0",
+    "dayjs": "^1.11.19",
+    "dotenv": "^17.2.3",
+    "framer-motion": "^12.23.26",
+    "nanoid": "^5.1.6",
     "next": "16.0.8",
     "react": "19.2.1",
-    "react-dom": "19.2.1"
+    "react-canvas-confetti": "^2.0.7",
+    "react-dom": "19.2.1",
+    "sentiment": "^5.0.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "eslint": "^9",
     "eslint-config-next": "16.0.8",
-    "tailwindcss": "^4"
+    "tailwindcss": "^4.1.17"
   }
 }
