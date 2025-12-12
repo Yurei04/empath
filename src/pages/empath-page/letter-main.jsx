@@ -1,5 +1,5 @@
 
-export default function EmapthConversationScreen (
+export default function LetterMain (
 
 ) {
     return (
