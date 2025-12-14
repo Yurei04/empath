@@ -1,5 +1,5 @@
 
-export default function EmapthLetterBubble (
+export default function LetterBubble (
 
 ) {
     return (
