@@ -9,7 +9,6 @@ export default function EmpathyMain() {
     return (
         <div className="w-full min-h-screen bg-black">
             <Navbar />
-            {/* EmpathCore now handles everything - no need to pass isLoading */}
             <EmpathCore />
             <Footer />
         </div>
