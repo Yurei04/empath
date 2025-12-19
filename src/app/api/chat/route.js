@@ -7,6 +7,7 @@
 import { NextResponse } from 'next/server'
 import { HfInference } from '@huggingface/inference'
 
+
 const hf = new HfInference(process.env.HUGGINGFACE_API_KEY)
 
 // ============================================
@@ -30,18 +31,48 @@ family: { dejection: 1.5, mood: 2.0, calmness: 1.5 },
 const sessions = new Map()
 
 function getSession(sessionId) {
-    if (!sessions.has(sessionId)) {
-        sessions.set(sessionId, {
-        dejection: 0,
-        calmness: 0,
-        mood: 0,
-        severity: 0,
-        mode: 'supportive',
-        history: [],
-        })
-    }
-    return sessions.get(sessionId)
+  if (!sessions.has(sessionId)) {
+    sessions.set(sessionId, {
+      dejection: 0,
+      calmness: 0,
+      mood: 0,
+      severity: 0,
+      mode: "supportive",
+      history: [],
+      pendingAction: null,
+    })
+  }
+  return sessions.get(sessionId)
 }
+
+
+
+function isAffirmative(text) {
+  return /^(yes|yeah|yep|sure|okay|ok|alright|why not)$/i.test(
+    text.trim()
+  )
+}
+
+function isNegative(text) {
+  return /^(no|nah|not now|maybe later)$/i.test(
+    text.trim()
+  )
+}
+
+function suggestAction(session, action, message) {
+  session.pendingAction = action
+
+  session.history.push({
+    role: "assistant",
+    content: message,
+  })
+
+  return {
+    response: message,
+  }
+}
+
+
 
 async function classifyIntent(text) {
     try {
@@ -62,46 +93,54 @@ async function classifyIntent(text) {
 }
 
 function updateState(session, intent, confidence) {
-    // Apply decay
-    session.dejection *= 0.88
-    session.calmness *= 0.88
-    session.mood *= 0.88
+  session.dejection *= 0.88
+  session.calmness *= 0.88
+  session.mood *= 0.88
 
-    // Add new weights
-    const weights = INTENT_WEIGHTS[intent] || {
-        dejection: 0.5,
-        mood: 0.5,
-        calmness: 0.5,
-    }
+  const weights = INTENT_WEIGHTS[intent] || {
+    dejection: 0.5,
+    mood: 0.5,
+    calmness: 0.5,
+  }
 
-    session.dejection += weights.dejection * confidence
-    session.mood += weights.mood * confidence
-    session.calmness += weights.calmness * confidence
+  session.dejection += weights.dejection * confidence
+  session.mood += weights.mood * confidence
+  session.calmness += weights.calmness * confidence
 
-    // Calculate severity
-    session.severity =
-        session.dejection * 0.5 +
-        session.mood * 0.25 +
-        session.calmness * 0.25
+  session.severity =
+    session.dejection * 0.5 +
+    session.mood * 0.25 +
+    session.calmness * 0.25
 
-    // Update mode
-    if (intent === 'suicide' || session.severity > 35) {
-        session.mode = 'crisis'
-    } else if (session.severity > 20) {
-        session.mode = 'urgent'
-    } else if (session.severity > 10) {
-        session.mode = 'concerned'
-    } else {
-        session.mode = 'supportive'
-    }
-
-    console.log(
-        `📊 ${intent} (${confidence.toFixed(2)}) | Mode: ${session.mode} | Severity: ${session.severity.toFixed(1)}`
-    )
+  if (intent === "suicide" || session.severity > 35) {
+    session.mode = "crisis"
+  } else if (session.severity > 20) {
+    session.mode = "urgent"
+  } else if (session.severity > 10) {
+    session.mode = "concerned"
+  } else {
+    session.mode = "supportive"
+  }
 }
 
 function getSystemPrompt(mode) {
-    const base = 'You are a warm, empathetic mental health support assistant.'
+const base = `
+        You are a warm, empathetic mental health support assistant.
+
+        Rules:
+        - You do NOT provide medical or clinical advice.
+        - You do NOT use profanity or harmful language.
+        - You respect user autonomy at all times.
+        - You may suggest gentle activities, but only proceed if the user agrees.
+        - If the user declines an activity, acknowledge and continue the conversation naturally.
+
+        Style:
+        - Speak calmly and compassionately.
+        - Keep responses concise (2–3 sentences).
+        - Ask open-ended, non-intrusive questions when appropriate.
+        - Never pressure the user to do anything.
+    `
+
 
     switch (mode) {
         case 'crisis':
@@ -120,171 +159,117 @@ function getSystemPrompt(mode) {
 // ============================================
 
 export async function POST(request) {
-    try {
-        const { message, sessionId = 'default', stream = false } =
-        await request.json()
+  try {
+    const { message, sessionId = "default", stream = false } =
+      await request.json()
 
-        if (!message) {
-            return NextResponse.json(
-                { error: 'No message provided' },
-                { status: 400 }
-            )
-        }
+    if (!message) {
+      return NextResponse.json({ error: "No message provided" }, { status: 400 })
+    }
 
     const session = getSession(sessionId)
 
-    // Intent classification (background)
+    /* ===============================
+       1️⃣ HANDLE CONSENT FIRST
+    =============================== */
+    if (session.pendingAction) {
+      if (isAffirmative(message)) {
+        const action = session.pendingAction
+        session.pendingAction = null
+
+        return NextResponse.json({
+          response: "Alright, let’s do that together.",
+          action,
+        })
+      }
+
+      if (isNegative(message)) {
+        session.pendingAction = null
+        return NextResponse.json({
+          response: "That’s okay. We can keep talking.",
+        })
+      }
+    }
+
+    /* ===============================
+       2️⃣ NORMAL CHAT FLOW
+    =============================== */
+    session.history.push({ role: "user", content: message })
+
     const { intent, confidence } = await classifyIntent(message)
     updateState(session, intent, confidence)
 
-    session.history.push({ role: 'user', content: message })
+    /* ===============================
+       3️⃣ CRISIS SHORT-CIRCUIT
+    =============================== */
+    if (session.mode === "crisis") {
+      const crisisResponse =
+        "I'm really concerned about your safety right now.\n\n" +
+        "Please reach out immediately:\n" +
+        "• Call/text 988\n" +
+        "• Text HOME to 741741\n" +
+        "• Call local emergency services\n\n" +
+        "You’re not alone."
 
-    // Crisis handling
-    if (session.mode === 'crisis') {
-        const crisisResponse =
-            "I'm really concerned about your safety right now.\n\n" +
-            'Please reach out immediately:\n' +
-            '• Call/text **988** (Suicide & Crisis Lifeline)\n' +
-            '• Text **HOME to 741741** (Crisis Text Line)\n' +
-            '• Call **911** or go to nearest ER\n\n' +
-            "You don't have to face this alone. Help is available 24/7."
+      session.history.push({ role: "assistant", content: crisisResponse })
 
-        session.history.push({ role: 'assistant', content: crisisResponse })
-
-        return NextResponse.json({
-            response: crisisResponse,
-            metrics: {
-            intent,
-            confidence,
-            severity: session.severity,
-            mode: session.mode,
-            dejection: session.dejection,
-            mood: session.mood,
-            calmness: session.calmness,
-            },
-        })
+      return NextResponse.json({ response: crisisResponse })
     }
 
+    /* ===============================
+       4️⃣ AI RESPONSE
+    =============================== */
     const systemMessage = getSystemPrompt(session.mode)
 
     const messages = [
-        { role: 'system', content: systemMessage },
-        ...session.history.slice(-10),
+      { role: "system", content: systemMessage },
+      ...session.history.slice(-10),
     ]
 
-    // ============================================
-    // STREAMING RESPONSE
-    // ============================================
-
-    if (stream) {
-        const streamResponse = hf.chatCompletionStream({
-            model: 'meta-llama/Llama-3.2-3B-Instruct',
-            messages,
-            max_tokens: 300,
-            temperature: 0.8,
-            top_p: 0.92,
-    })
-
-    const encoder = new TextEncoder()
-
-    const readable = new ReadableStream({
-        async start(controller) {
-        let fullResponse = ''
-
-        try {
-            for await (const chunk of streamResponse) {
-            const text = chunk?.choices?.[0]?.delta?.content
-            if (text) {
-                fullResponse += text
-                controller.enqueue(
-                encoder.encode(
-                    `data: ${JSON.stringify({ chunk: text })}\n\n`
-                )
-                )
-            }
-            }
-
-            session.history.push({
-            role: 'assistant',
-            content: fullResponse,
-            })
-
-            controller.enqueue(
-            encoder.encode(
-                `data: ${JSON.stringify({
-                done: true,
-                metrics: {
-                    intent,
-                    confidence,
-                    severity: session.severity,
-                    mode: session.mode,
-                    dejection: session.dejection,
-                    mood: session.mood,
-                    calmness: session.calmness,
-                },
-                })}\n\n`
-            )
-            )
-        } catch (error) {
-            console.error('Streaming error:', error)
-            controller.enqueue(
-            encoder.encode(
-                `data: ${JSON.stringify({
-                chunk:
-                    "I'm here to support you. Could you tell me more?",
-                })}\n\n`
-            )
-            )
-        } finally {
-            controller.close()
-        }
-        },
-    })
-
-    return new Response(readable, {
-        headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
-        },
-    })
-    }
-
-    // ============================================
-    // NON-STREAMING RESPONSE
-    // ============================================
-
     const response = await hf.chatCompletion({
-        model: 'meta-llama/Llama-3.2-3B-Instruct',
-        messages,
-        max_tokens: 300,
-        temperature: 0.8,
-        top_p: 0.92,
+      model: "meta-llama/Llama-3.2-3B-Instruct",
+      messages,
+      max_tokens: 300,
+      temperature: 0.8,
+      top_p: 0.92,
     })
 
-        const botResponse = response.choices[0].message.content
-        session.history.push({ role: 'assistant', content: botResponse })
+    const botResponse = response.choices[0].message.content
+    session.history.push({ role: "assistant", content: botResponse })
 
-        return NextResponse.json({
-            response: botResponse,
-            metrics: {
-                intent,
-                confidence,
-                severity: session.severity,
-                mode: session.mode,
-                dejection: session.dejection,
-                mood: session.mood,
-                calmness: session.calmness,
-            },
-        })
-    } catch (error) {
-        console.error('Chat error:', error)
-            return NextResponse.json(
-            { error: 'Failed to process message', details: error.message },
-            { status: 500 }
-        )
+    /* ===============================
+       5️⃣ SUGGEST ACTION (OPTIONAL)
+    =============================== */
+    let suggestion = null
+
+    if (session.mode === "concerned") {
+      suggestion = suggestAction(
+        session,
+        "PLAY_GAME",
+        "It might help to pause for a moment. Would you like to play a short calming game?"
+      )
     }
+
+    if (!suggestion && session.mode === "supportive" && Math.random() < 0.3) {
+      suggestion = suggestAction(
+        session,
+        "CREATE_LETTER",
+        "Would you like to write something encouraging, even just for yourself?"
+      )
+    }
+
+    if (suggestion) return NextResponse.json(suggestion)
+
+    return NextResponse.json({ response: botResponse })
+  } catch (error) {
+    console.error(error)
+    return NextResponse.json(
+      { error: "Failed to process message" },
+      { status: 500 }
+    )
+  }
 }
+
 
 // ============================================
 // GET — Metrics Endpoint
