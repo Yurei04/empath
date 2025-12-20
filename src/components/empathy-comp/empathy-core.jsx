@@ -6,7 +6,7 @@ import HomepageMain from "@/pages/home-page/home-page-main"
 import LetterMain from "@/pages/empath-page/letter-main"
 
 export default function EmpathCore() {
-  const [view, setView] = useState("chat")
+  const [view, setView] = useState("home")
 
   return (
     <div className="flex flex-col items-center justify-center w-full min-h-screen bg-gradient-to-br from-gray-950 via-orange-950 to-yellow-950">
@@ -35,7 +35,7 @@ export default function EmpathCore() {
         </div>
 
         {/* Navigation */}
-        <div className="mt-4 flex justify-center gap-3 flex-wrap">
+        <div className="mt-4 flex justify-center gap-3 flex-wrap shadow-lg backdrop-blur-lg border border-amber-400 rounded-2xl px-5 sm:px-8 py-5 transition-all duration-300">
           <NavButton label="💬 Chat" active={view === "chat"} onClick={() => setView("chat")} />
           <NavButton label="✉️ Letter" active={view === "letter"} onClick={() => setView("letter")} />
           <NavButton label="🏠 Home" active={view === "home"} onClick={() => setView("home")} />
@@ -50,7 +50,7 @@ function NavButton({ label, active, onClick }) {
   return (
     <button
       onClick={onClick}
-      className={`px-6 py-2 rounded-lg font-medium transition-all ${
+      className={`px-6 py-2 rounded-lg font-medium transition-all cursor-pointer ${
         active
           ? "bg-gradient-to-r from-yellow-600 to-orange-600 text-white shadow-lg shadow-orange-500/50"
           : "bg-gray-800/50 text-gray-400 hover:bg-gray-800 border border-yellow-700/30 hover:border-yellow-600/50"

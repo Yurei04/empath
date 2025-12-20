@@ -4,10 +4,12 @@ import LetterMessage from "@/components/letter-comp/letter-message";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/lib/supabase";
+import Autoplay from "embla-carousel-autoplay";
 import { useEffect, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { motion } from "framer-motion";
 import { Send, Mail } from "lucide-react";
+import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
 
 export default function LetterMain() {
     const [letters, setLetters] = useState([])
@@ -106,17 +108,31 @@ export default function LetterMain() {
                             </Card>
                         </motion.div>   
                     ) : (
-                        <div className="space-y-3 sm:space-y-4">
-                            {letters.map((letter, idx) => (
-                                <div key={letter.id || idx}>
-                                    <LetterMessage 
-                                        title={letter.title}
-                                        author={letter.author}
-                                        letter={letter.letter}
-                                    />
-                                </div>    
-                            ))}
-                        </div>
+                        <Carousel 
+                            opts={{
+                                align: "center",
+                                axis: "y",
+                                loop: true,
+                            }}
+                            plugins={[
+                                Autoplay({
+                                delay: 3000,
+                                stopOnInteraction: false,
+                                }),
+                            ]}
+                            className="space-y-3 sm:space-y-4">
+                            <CarouselContent className="flex">
+                                {letters.map((letter, idx) => (
+                                    <CarouselItem key={letter.id || idx}>
+                                        <LetterMessage 
+                                            title={letter.title}
+                                            author={letter.author}
+                                            letter={letter.letter}
+                                        />
+                                    </CarouselItem>    
+                                ))}
+                            </CarouselContent>
+                       </Carousel>
                     )}
                 </div>
 

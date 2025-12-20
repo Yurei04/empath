@@ -60,7 +60,7 @@ function EmapthConversation({ messages, isLoading, sendMessage }) {
                   <button
                     key={idx}
                     onClick={() => sendMessage(suggestion)}
-                    className="bg-gray-900 border border-yellow-600/30 text-yellow-50 rounded-xl px-4 py-3 text-sm text-left hover:bg-gray-800 hover:border-yellow-500/50 transition-all"
+                    className="bg-gray-900 cursor-pointer border border-yellow-600/30 text-yellow-50 rounded-xl px-4 py-3 text-sm text-left hover:bg-gray-800 hover:border-yellow-500/50 transition-all"
                   >
                     {suggestion}
                   </button>
