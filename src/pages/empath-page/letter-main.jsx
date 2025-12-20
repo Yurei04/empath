@@ -56,7 +56,7 @@ export default function LetterMain() {
     }
 
     return (
-        <div className="w-full h-screen bg-gradient-to-br from-slate-950 via-amber-950/20 to-slate-900 flex flex-col p-3 sm:p-6 overflow-hidden">
+        <div className="w-full min-h-screen bg-gradient-to-br from-slate-950 via-amber-950/20 to-slate-900 flex flex-col p-3 sm:p-6">
             {/* Header */}
             <motion.div
                 initial={{ opacity: 0, y: -20 }}
@@ -124,8 +124,7 @@ export default function LetterMain() {
                 <motion.div 
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    className="lg:w-[380px] xl:w-[420px] flex-shrink-0 overflow-y-auto"
-                >
+                    className="lg:w-[380px] xl:w-[420px] h-screen flex-shrink-0">
                     <Card className="p-4 sm:p-6 shadow-2xl backdrop-blur-xl border-2 border-yellow-500/20 bg-gradient-to-br from-amber-950/40 to-slate-900/60">
                         <CardContent className="p-0 space-y-3 sm:space-y-4">
                             <div>
