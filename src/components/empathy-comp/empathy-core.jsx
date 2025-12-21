@@ -6,7 +6,7 @@ import HomepageMain from "@/pages/home-page/home-page-main"
 import LetterMain from "@/pages/empath-page/letter-main"
 
 export default function EmpathCore() {
-  const [view, setView] = useState("home")
+  const [view, setView] = useState("chat")
 
   return (
     <div className="flex flex-col items-center justify-center w-full min-h-screen bg-gradient-to-br from-gray-950 via-orange-950 to-yellow-950">
