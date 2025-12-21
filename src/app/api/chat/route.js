@@ -1,93 +1,88 @@
-/**
- * File: app/api/chat/route.js
- * ==========================
- * Mental Health Chatbot API Route
- * Uses external HF Space for classification + local LLM
- */
-
 import { NextResponse } from 'next/server'
 import { HfInference } from '@huggingface/inference'
 
 // ============================================
 // CONFIGURATION
+// DO NOT TOUCH IN ANY CIRCUMSTANCES
 // ============================================
 
 const hf = new HfInference(process.env.HUGGINGFACE_API_KEY)
 
-// Replace with your actual HF Space URL after deployment
-const CLASSIFIER_API_URL = process.env.CLASSIFIER_API_URL || 
-  'https://YOUR_USERNAME-mental-health-classifier.hf.space'
+// External API endpoints
+const EMOTION_CLASSIFIER_URL = process.env.CLASSIFIER_API_URL
 
-// Best free conversational models (in order of preference)
+const DISTORTION_DETECTOR_URL = process.env.DISTORTION_DETECTOR_URL 
+
+// LLM Models 
 const LLM_MODELS = [
-  'meta-llama/Llama-3.3-70B-Instruct',      // Best quality
-  'meta-llama/Llama-3.2-3B-Instruct',       // Fast and good
-  'mistralai/Mistral-7B-Instruct-v0.3',     // Reliable fallback
-  'microsoft/Phi-3.5-mini-instruct',        // Lightweight fallback
+  'meta-llama/Llama-3.3-70B-Instruct',
+  'meta-llama/Llama-3.2-3B-Instruct',
 ]
 
 // ============================================
 // SESSION MANAGEMENT
 // ============================================
 
-// In-memory sessions (use Redis/Vercel KV in production)
 const sessions = new Map()
 
 function getSession(sessionId) {
   if (!sessions.has(sessionId)) {
     sessions.set(sessionId, {
-      classifierSessionId: null, // HF Space session ID
+      emotionSessionId: null,
       history: [],
-      lastMetrics: {
+      emotionMetrics: {
         mode: 'supportive',
         severity: 0,
         intent: 'general_support',
+        dejection: 0,
+        mood: 0,
+        calmness: 0,
       },
+      distortionMetrics: {
+        totalDistortions: 0,
+        recentDistortions: [],
+        distortionTrend: 'stable', // stable, increasing, decreasing
+        dominantDistortions: [],
+        cognitiveLoad: 0, // 0-100 scale
+      },
+      combinedSeverity: 0,
+      interventionLevel: 'observe', // observe, guide, intervene, crisis
     })
   }
   return sessions.get(sessionId)
 }
 
 // ============================================
-// CLASSIFIER API INTEGRATION
+// EMOTION CLASSIFICATION - MODEL: EMPATHY
 // ============================================
 
-async function classifyWithRetry(text, sessionId = null, maxRetries = 2) {
+async function classifyEmotion(text, sessionId = null, maxRetries = 2) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 10000) // 10s timeout
+      const timeout = setTimeout(() => controller.abort(), 10000)
 
-      const response = await fetch(`${CLASSIFIER_API_URL}/classify`, {
+      const response = await fetch(`${EMOTION_CLASSIFIER_URL}/classify`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text,
-          session_id: sessionId,
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, session_id: sessionId }),
         signal: controller.signal,
       })
 
       clearTimeout(timeout)
 
       if (!response.ok) {
-        throw new Error(`Classifier API error: ${response.status}`)
+        throw new Error(`Emotion API error: ${response.status}`)
       }
 
       const data = await response.json()
-      
-      console.log(`✅ Classification: ${data.intent} (${data.confidence.toFixed(2)}) | Mode: ${data.mode} | Severity: ${data.severity}`)
-      
+      console.log(`✅ Emotion: ${data.intent} (${data.confidence.toFixed(2)}) | Mode: ${data.mode}`)
       return data
 
     } catch (error) {
-      console.error(`❌ Classification attempt ${attempt + 1} failed:`, error.message)
+      console.error(`❌ Emotion classification attempt ${attempt + 1} failed:`, error.message)
       
       if (attempt === maxRetries) {
-        // Return safe defaults on final failure
-        console.warn('⚠️ Using fallback classification')
         return {
           session_id: sessionId,
           intent: 'general_support',
@@ -97,18 +92,237 @@ async function classifyWithRetry(text, sessionId = null, maxRetries = 2) {
           calmness: 0,
           severity: 0,
           mode: 'supportive',
-          system_prompt: 'You are a warm, empathetic mental health support assistant. Have a natural, supportive conversation. Keep responses concise (2-3 sentences). Listen actively.',
+          system_prompt: 'You are a warm, empathetic mental health support assistant.',
         }
       }
       
-      // Wait before retry (exponential backoff)
       await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)))
     }
   }
 }
 
 // ============================================
-// LLM INTEGRATION WITH FALLBACKS
+// COGNITIVE DISTORTION DETECTION - MODEL: EMPHASIST
+// ============================================
+
+async function detectDistortions(text, threshold = 0.5, maxRetries = 2) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 10000)
+
+      const response = await fetch(`${DISTORTION_DETECTOR_URL}/detect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, threshold }),
+        signal: controller.signal,
+      })
+
+      clearTimeout(timeout)
+
+      if (!response.ok) {
+        throw new Error(`Distortion API error: ${response.status}`)
+      }
+
+      const data = await response.json()
+      
+      if (data.has_distortions) {
+        const distortionList = data.distortions.map(d => d.distortion).join(', ')
+        console.log(`🧠 Distortions: ${distortionList}`)
+      } else {
+        console.log(`✅ No distortions detected`)
+      }
+      
+      return data
+
+    } catch (error) {
+      console.error(`❌ Distortion detection attempt ${attempt + 1} failed:`, error.message)
+      
+      if (attempt === maxRetries) {
+        return {
+          text,
+          distortions: [],
+          has_distortions: false,
+          summary: 'Detection unavailable',
+        }
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt)))
+    }
+  }
+}
+
+// ============================================
+// DISTORTION WEIGHTS FOR SEVERITY
+// ============================================
+
+const DISTORTION_SEVERITY_WEIGHTS = {
+  catastrophizing: 3.0,
+  overgeneralization: 2.5,
+  black_and_white: 2.0,
+  self_blame: 2.5,
+  mind_reading: 1.5,
+}
+
+// ============================================
+// COMBINED METRICS CALCULATION
+// ============================================
+
+function updateDistortionMetrics(session, distortionData) {
+  const { distortions, has_distortions } = distortionData
+  
+  // Update recent distortions (keep last 5 messages)
+  if (has_distortions) {
+    session.distortionMetrics.recentDistortions.push({
+      timestamp: Date.now(),
+      distortions: distortions.map(d => d.distortion),
+      count: distortions.length,
+    })
+    
+    // Keep only last 5
+    if (session.distortionMetrics.recentDistortions.length > 5) {
+      session.distortionMetrics.recentDistortions.shift()
+    }
+  }
+  
+  // Calculate total distortions
+  session.distortionMetrics.totalDistortions += distortions.length
+  
+  // Calculate cognitive load (0-100)
+  let cognitiveLoad = 0
+  distortions.forEach(d => {
+    const weight = DISTORTION_SEVERITY_WEIGHTS[d.distortion] || 1.0
+    cognitiveLoad += d.confidence * weight * 20 // Scale to 0-100
+  })
+  session.distortionMetrics.cognitiveLoad = Math.min(100, cognitiveLoad)
+  
+  // Determine distortion trend
+  if (session.distortionMetrics.recentDistortions.length >= 3) {
+    const recent = session.distortionMetrics.recentDistortions
+    const lastThree = recent.slice(-3).map(r => r.count)
+    
+    if (lastThree[2] > lastThree[1] && lastThree[1] > lastThree[0]) {
+      session.distortionMetrics.distortionTrend = 'increasing'
+    } else if (lastThree[2] < lastThree[1] && lastThree[1] < lastThree[0]) {
+      session.distortionMetrics.distortionTrend = 'decreasing'
+    } else {
+      session.distortionMetrics.distortionTrend = 'stable'
+    }
+  }
+  
+  // Find dominant distortions
+  const distortionCounts = {}
+  session.distortionMetrics.recentDistortions.forEach(entry => {
+    entry.distortions.forEach(d => {
+      distortionCounts[d] = (distortionCounts[d] || 0) + 1
+    })
+  })
+  
+  session.distortionMetrics.dominantDistortions = Object.entries(distortionCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 2)
+    .map(([distortion]) => distortion)
+}
+
+function calculateCombinedSeverity(session) {
+  const emotionSeverity = session.emotionMetrics.severity
+  const cognitiveLoad = session.distortionMetrics.cognitiveLoad
+  const distortionTrend = session.distortionMetrics.distortionTrend
+  
+  // Base combined severity (60% emotion, 40% cognitive)
+  let combined = (emotionSeverity * 6) + (cognitiveLoad * 4)
+  
+  // Apply trend modifier
+  if (distortionTrend === 'increasing') {
+    combined *= 1.2 // 20% increase
+  } else if (distortionTrend === 'decreasing') {
+    combined *= 0.9 // 10% decrease
+  }
+  
+  session.combinedSeverity = Math.min(100, combined)
+  
+  // Determine intervention level
+  if (session.emotionMetrics.mode === 'crisis') {
+    session.interventionLevel = 'crisis'
+  } else if (session.combinedSeverity > 60 || distortionTrend === 'increasing') {
+    session.interventionLevel = 'intervene'
+  } else if (session.combinedSeverity > 35) {
+    session.interventionLevel = 'guide'
+  } else {
+    session.interventionLevel = 'observe'
+  }
+}
+
+// ============================================
+// ENHANCED SYSTEM PROMPT GENERATION
+// ============================================
+
+function generateEnhancedSystemPrompt(session, distortionData) {
+  const { emotionMetrics, distortionMetrics, interventionLevel, combinedSeverity } = session
+  const { has_distortions, distortions } = distortionData
+  
+  let basePrompt = "You are a warm, empathetic mental health support assistant trained in Cognitive Behavioral Therapy (CBT)."
+  
+  // Add emotion-based context
+  if (emotionMetrics.mode === 'crisis') {
+    basePrompt += " The user is in crisis. Show genuine concern and guide them to crisis resources immediately."
+    return basePrompt
+  }
+  
+  // Add severity context
+  if (combinedSeverity > 60) {
+    basePrompt += ` The user shows high distress (severity ${Math.round(combinedSeverity)}/100). Be extra empathetic and supportive.`
+  } else if (combinedSeverity > 35) {
+    basePrompt += ` The user is experiencing moderate distress (severity ${Math.round(combinedSeverity)}/100).`
+  }
+  
+  // Add cognitive distortion context
+  if (has_distortions) {
+    const distortionNames = distortions.map(d => d.distortion.replace('_', ' ')).join(', ')
+    
+    basePrompt += `\n\nIMPORTANT: The user's message contains cognitive distortions: ${distortionNames}.`
+    
+    // Add specific guidance based on intervention level
+    if (interventionLevel === 'intervene') {
+      basePrompt += " Gently challenge these thinking patterns using Socratic questioning. Help them examine evidence and consider alternative perspectives."
+    } else if (interventionLevel === 'guide') {
+      basePrompt += " Acknowledge their feelings, then subtly introduce alternative perspectives. Use validation before reframing."
+    } else {
+      basePrompt += " Note these patterns but focus on validation and empathy. Build rapport before addressing distortions."
+    }
+    
+    // Add specific distortion guidance
+    if (distortions.some(d => d.distortion === 'catastrophizing')) {
+      basePrompt += " Help them examine the likelihood of worst-case scenarios."
+    }
+    if (distortions.some(d => d.distortion === 'overgeneralization')) {
+      basePrompt += " Gently point out exceptions to their 'always/never' statements."
+    }
+    if (distortions.some(d => d.distortion === 'black_and_white')) {
+      basePrompt += " Introduce nuance and middle-ground perspectives."
+    }
+    if (distortions.some(d => d.distortion === 'self_blame')) {
+      basePrompt += " Help them distribute responsibility more fairly and consider external factors."
+    }
+    if (distortions.some(d => d.distortion === 'mind_reading')) {
+      basePrompt += " Encourage them to check assumptions rather than assume others' thoughts."
+    }
+  }
+  
+  // Add trend context
+  if (distortionMetrics.distortionTrend === 'increasing') {
+    basePrompt += "\n\nNote: Their cognitive distortions are increasing. Consider suggesting professional support if this continues."
+  } else if (distortionMetrics.distortionTrend === 'decreasing') {
+    basePrompt += "\n\nPositive sign: Their cognitive distortions are decreasing. Acknowledge their progress."
+  }
+  
+  basePrompt += "\n\nKeep responses concise (2-4 sentences). Use empathy first, then gentle guidance."
+  
+  return basePrompt
+}
+
+// ============================================
+// LLM GENERATION
 // ============================================
 
 async function generateLLMResponse(messages, modelIndex = 0) {
@@ -130,15 +344,13 @@ async function generateLLMResponse(messages, modelIndex = 0) {
     })
 
     const content = response.choices[0].message.content
-    console.log(`✅ LLM response generated with ${currentModel}`)
+    console.log(`✅ LLM response generated`)
     return content
 
   } catch (error) {
     console.error(`❌ ${currentModel} failed:`, error.message)
     
-    // Try next model
     if (modelIndex < LLM_MODELS.length - 1) {
-      console.log(`🔄 Falling back to next model...`)
       return generateLLMResponse(messages, modelIndex + 1)
     }
     
@@ -154,8 +366,6 @@ async function generateStreamingResponse(messages, modelIndex = 0) {
   const currentModel = LLM_MODELS[modelIndex]
   
   try {
-    console.log(`🤖 Attempting streaming with: ${currentModel}`)
-    
     const stream = hf.chatCompletionStream({
       model: currentModel,
       messages,
@@ -167,11 +377,9 @@ async function generateStreamingResponse(messages, modelIndex = 0) {
     return { stream, model: currentModel }
 
   } catch (error) {
-    console.error(`❌ ${currentModel} streaming failed:`, error.message)
+    console.error(`❌ ${currentModel} streaming failed`)
     
-    // Try next model
     if (modelIndex < LLM_MODELS.length - 1) {
-      console.log(`🔄 Falling back to next model...`)
       return generateStreamingResponse(messages, modelIndex + 1)
     }
     
@@ -190,13 +398,13 @@ function getCrisisResponse() {
     '• Call/text **988** (Suicide & Crisis Lifeline - US)\n' +
     '• Text **HOME to 741741** (Crisis Text Line - US)\n' +
     '• Call **911** or go to nearest ER\n' +
-    '• International: Find your local crisis line at findahelpline.com\n\n' +
+    '• International: findahelpline.com\n\n' +
     "You don't have to face this alone. Help is available 24/7."
   )
 }
 
 // ============================================
-// POST — Chat Handler
+// POST — Enhanced Chat Handler
 // ============================================
 
 export async function POST(request) {
@@ -212,48 +420,69 @@ export async function POST(request) {
 
     const session = getSession(sessionId)
 
-    // Step 1: Classify intent with external API
-    const classification = await classifyWithRetry(
-      message,
-      session.classifierSessionId
-    )
+    // ============================================
+    // DUAL CLASSIFICATION
+    // ============================================
 
-    // Update session with classifier's session ID
-    session.classifierSessionId = classification.session_id
-    session.lastMetrics = {
-      mode: classification.mode,
-      severity: classification.severity,
-      intent: classification.intent,
-      confidence: classification.confidence,
-      dejection: classification.dejection,
-      mood: classification.mood,
-      calmness: classification.calmness,
+    console.log('\n🔍 Running dual analysis...')
+
+    // Run both classifiers in parallel
+    const [emotionData, distortionData] = await Promise.all([
+      classifyEmotion(message, session.emotionSessionId),
+      detectDistortions(message, 0.5),
+    ])
+
+    // Update emotion session
+    session.emotionSessionId = emotionData.session_id
+    session.emotionMetrics = {
+      mode: emotionData.mode,
+      severity: emotionData.severity,
+      intent: emotionData.intent,
+      confidence: emotionData.confidence,
+      dejection: emotionData.dejection,
+      mood: emotionData.mood,
+      calmness: emotionData.calmness,
     }
+
+    // Update distortion metrics
+    updateDistortionMetrics(session, distortionData)
+    calculateCombinedSeverity(session)
+
+    console.log(`📊 Combined Severity: ${session.combinedSeverity.toFixed(1)}/100 | Intervention: ${session.interventionLevel}`)
 
     // Add user message to history
     session.history.push({ role: 'user', content: message })
 
-    // Step 2: Handle crisis mode
-    if (classification.mode === 'crisis') {
+    // ============================================
+    // CRISIS HANDLING
+    // ============================================
+
+    if (emotionData.mode === 'crisis') {
       const crisisResponse = getCrisisResponse()
       session.history.push({ role: 'assistant', content: crisisResponse })
 
       return NextResponse.json({
         response: crisisResponse,
-        metrics: session.lastMetrics,
+        emotionMetrics: session.emotionMetrics,
+        distortionMetrics: session.distortionMetrics,
+        combinedSeverity: session.combinedSeverity,
+        interventionLevel: session.interventionLevel,
         isCrisis: true,
       })
     }
 
-    // Step 3: Prepare messages for LLM
-    const systemMessage = classification.system_prompt
+    // ============================================
+    // GENERATE ENHANCED RESPONSE
+    // ============================================
+
+    const systemPrompt = generateEnhancedSystemPrompt(session, distortionData)
     const messages = [
-      { role: 'system', content: systemMessage },
-      ...session.history.slice(-10), // Keep last 10 messages for context
+      { role: 'system', content: systemPrompt },
+      ...session.history.slice(-10),
     ]
 
     // ============================================
-    // STREAMING RESPONSE
+    // STREAMING
     // ============================================
 
     if (stream) {
@@ -261,21 +490,18 @@ export async function POST(request) {
       try {
         streamObj = await generateStreamingResponse(messages)
       } catch (error) {
-        console.error('❌ All streaming models failed, falling back to non-streaming')
+        console.error('❌ Streaming failed, using fallback')
+        const response = await generateLLMResponse(messages)
+        session.history.push({ role: 'assistant', content: response })
         
-        // Fallback to non-streaming
-        try {
-          const response = await generateLLMResponse(messages)
-          session.history.push({ role: 'assistant', content: response })
-          
-          return NextResponse.json({
-            response,
-            metrics: session.lastMetrics,
-            fallback: true,
-          })
-        } catch (fallbackError) {
-          throw new Error('All LLM attempts failed')
-        }
+        return NextResponse.json({
+          response,
+          emotionMetrics: session.emotionMetrics,
+          distortionMetrics: session.distortionMetrics,
+          combinedSeverity: session.combinedSeverity,
+          interventionLevel: session.interventionLevel,
+          fallback: true,
+        })
       }
 
       const encoder = new TextEncoder()
@@ -290,25 +516,21 @@ export async function POST(request) {
               if (text) {
                 fullResponse += text
                 controller.enqueue(
-                  encoder.encode(
-                    `data: ${JSON.stringify({ chunk: text })}\n\n`
-                  )
+                  encoder.encode(`data: ${JSON.stringify({ chunk: text })}\n\n`)
                 )
               }
             }
 
-            // Save to history
-            session.history.push({
-              role: 'assistant',
-              content: fullResponse,
-            })
+            session.history.push({ role: 'assistant', content: fullResponse })
 
-            // Send completion with metrics
             controller.enqueue(
               encoder.encode(
                 `data: ${JSON.stringify({
                   done: true,
-                  metrics: session.lastMetrics,
+                  emotionMetrics: session.emotionMetrics,
+                  distortionMetrics: session.distortionMetrics,
+                  combinedSeverity: session.combinedSeverity,
+                  interventionLevel: session.interventionLevel,
                   model: streamObj.model,
                 })}\n\n`
               )
@@ -316,22 +538,13 @@ export async function POST(request) {
 
           } catch (error) {
             console.error('❌ Streaming error:', error)
+            const fallbackText = "I'm here to support you. Could you tell me more?"
             
-            // Send fallback response
-            const fallbackText = "I'm here to support you. Could you tell me more about what you're experiencing?"
-            fullResponse = fallbackText
-            
-            session.history.push({
-              role: 'assistant',
-              content: fallbackText,
-            })
+            session.history.push({ role: 'assistant', content: fallbackText })
 
             controller.enqueue(
               encoder.encode(
-                `data: ${JSON.stringify({ 
-                  chunk: fallbackText,
-                  error: true 
-                })}\n\n`
+                `data: ${JSON.stringify({ chunk: fallbackText, error: true })}\n\n`
               )
             )
             
@@ -339,7 +552,10 @@ export async function POST(request) {
               encoder.encode(
                 `data: ${JSON.stringify({
                   done: true,
-                  metrics: session.lastMetrics,
+                  emotionMetrics: session.emotionMetrics,
+                  distortionMetrics: session.distortionMetrics,
+                  combinedSeverity: session.combinedSeverity,
+                  interventionLevel: session.interventionLevel,
                 })}\n\n`
               )
             )
@@ -359,28 +575,29 @@ export async function POST(request) {
     }
 
     // ============================================
-    // NON-STREAMING RESPONSE
+    // NON-STREAMING
     // ============================================
 
     let botResponse
     try {
       botResponse = await generateLLMResponse(messages)
     } catch (error) {
-      console.error('❌ All LLM models failed:', error)
-      
-      // Final fallback response
-      botResponse = "I'm here to listen and support you. Could you share more about what's on your mind?"
+      console.error('❌ All LLM models failed')
+      botResponse = "I'm here to listen and support you. Could you share more?"
     }
 
     session.history.push({ role: 'assistant', content: botResponse })
 
     return NextResponse.json({
       response: botResponse,
-      metrics: session.lastMetrics,
+      emotionMetrics: session.emotionMetrics,
+      distortionMetrics: session.distortionMetrics,
+      combinedSeverity: session.combinedSeverity,
+      interventionLevel: session.interventionLevel,
     })
 
   } catch (error) {
-    console.error('❌ Critical chat error:', error)
+    console.error('❌ Critical error:', error)
     
     return NextResponse.json(
       { 
@@ -393,7 +610,7 @@ export async function POST(request) {
 }
 
 // ============================================
-// GET — Metrics Endpoint
+// GET — Enhanced Metrics
 // ============================================
 
 export async function GET(request) {
@@ -402,34 +619,21 @@ export async function GET(request) {
     const sessionId = searchParams.get('sessionId') || 'default'
     const session = getSession(sessionId)
 
-    // If we have a classifier session, fetch current state
-    if (session.classifierSessionId) {
-      try {
-        const response = await fetch(
-          `${CLASSIFIER_API_URL}/session/${session.classifierSessionId}`
-        )
-        
-        if (response.ok) {
-          const data = await response.json()
-          return NextResponse.json(data)
-        }
-      } catch (error) {
-        console.error('Failed to fetch classifier metrics:', error)
-      }
-    }
-
-    // Return cached metrics
-    return NextResponse.json(session.lastMetrics)
+    return NextResponse.json({
+      emotionMetrics: session.emotionMetrics,
+      distortionMetrics: session.distortionMetrics,
+      combinedSeverity: session.combinedSeverity,
+      interventionLevel: session.interventionLevel,
+    })
 
   } catch (error) {
     console.error('Metrics fetch error:', error)
     return NextResponse.json(
       { 
-        mode: 'supportive',
-        severity: 0,
-        dejection: 0,
-        mood: 0,
-        calmness: 0,
+        emotionMetrics: { mode: 'supportive', severity: 0 },
+        distortionMetrics: { cognitiveLoad: 0, totalDistortions: 0 },
+        combinedSeverity: 0,
+        interventionLevel: 'observe',
       },
       { status: 200 }
     )
@@ -447,19 +651,17 @@ export async function DELETE(request) {
     
     const session = getSession(sessionId)
     
-    // Reset classifier session if exists
-    if (session.classifierSessionId) {
+    if (session.emotionSessionId) {
       try {
         await fetch(
-          `${CLASSIFIER_API_URL}/session/reset/${session.classifierSessionId}`,
+          `${EMOTION_CLASSIFIER_URL}/session/reset/${session.emotionSessionId}`,
           { method: 'POST' }
         )
       } catch (error) {
-        console.error('Failed to reset classifier session:', error)
+        console.error('Failed to reset emotion session:', error)
       }
     }
     
-    // Delete local session
     sessions.delete(sessionId)
     
     return NextResponse.json({ 
