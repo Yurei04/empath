@@ -225,33 +225,38 @@ function updateDistortionMetrics(session, distortionData) {
 }
 
 function calculateCombinedSeverity(session) {
-  const emotionSeverity = session.emotionMetrics.severity
-  const cognitiveLoad = session.distortionMetrics.cognitiveLoad
+  const emotionSeverity = session.emotionMetrics.severity 
+  const cognitiveLoad = session.distortionMetrics.cognitiveLoad 
   const distortionTrend = session.distortionMetrics.distortionTrend
-  
-  // Base combined severity (60% emotion, 40% cognitive)
-  let combined = (emotionSeverity * 6) + (cognitiveLoad * 4)
-  
+
+  // Weighted percentage score
+  let combined =
+    (emotionSeverity * 0.6 + cognitiveLoad * 0.4) * 100
+
   // Apply trend modifier
   if (distortionTrend === 'increasing') {
-    combined *= 1.2 // 20% increase
+    combined *= 1.2 // +20%
   } else if (distortionTrend === 'decreasing') {
-    combined *= 0.9 // 10% decrease
+    combined *= 0.9 // −10%
   }
-  
-  session.combinedSeverity = Math.min(100, combined)
-  
+
+  session.combinedSeverity = Math.min(100, Math.round(combined))
+
   // Determine intervention level
   if (session.emotionMetrics.mode === 'crisis') {
     session.interventionLevel = 'crisis'
-  } else if (session.combinedSeverity > 60 || distortionTrend === 'increasing') {
+  } else if (
+    session.combinedSeverity >= 60 ||
+    distortionTrend === 'increasing'
+  ) {
     session.interventionLevel = 'intervene'
-  } else if (session.combinedSeverity > 35) {
+  } else if (session.combinedSeverity >= 35) {
     session.interventionLevel = 'guide'
   } else {
     session.interventionLevel = 'observe'
   }
 }
+
 
 // ============================================
 // ENHANCED SYSTEM PROMPT GENERATION
