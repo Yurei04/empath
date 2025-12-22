@@ -14,7 +14,7 @@ export default function HomepageMain() {
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
-              className={`px-6 py-2 rounded-lg font-medium transition-all ${
+              className={`px-6 py-2 rounded-lg font-medium transition-all cursor-pointer ${
                 activeTab === tab
                   ? "bg-gradient-to-r from-orange-600 to-yellow-500 text-gray-950 shadow-lg"
                   : "bg-gray-900 text-yellow-500 border border-yellow-600/30 hover:border-yellow-500/50"

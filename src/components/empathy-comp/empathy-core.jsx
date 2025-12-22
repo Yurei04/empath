@@ -6,6 +6,7 @@ import HomepageMain from "@/pages/home-page/home-page-main"
 import LetterMain from "@/pages/empath-page/letter-main"
 import { MessageSquare, Mail, Home, BookHeart } from 'lucide-react'
 import BlogPage from "@/pages/blog-page/blog-page"
+import AdminDashboard from "../admin-comp/admin-dashboard"
 
 export default function EmpathCore() {
   const [view, setView] = useState("chat")
@@ -23,6 +24,8 @@ export default function EmpathCore() {
             {view === "home" && <HomepageMain />}
 
             {view === "blog" && <BlogPage />}
+
+             {view === "Admin" && <AdminDashboard />}
           </div>
         </div>
 
@@ -32,6 +35,7 @@ export default function EmpathCore() {
           <NavButton icon={Mail} label="Letter" active={view === "letter"} onClick={() => setView("letter")} />
           <NavButton icon={Home} label="Home" active={view === "home"} onClick={() => setView("home")} />
           <NavButton icon={BookHeart} label="Blog" active={view === "blog"} onClick={() => setView("blog")} />
+          <NavButton icon={BookHeart} label="Admin" active={view === "admin"} onClick={() => setView("admin")} />
         </div>
       
       </div>
