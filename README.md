@@ -335,6 +335,13 @@ empath-ai/
 - **Hugging Face Hub**
 - **Hugging Face Spaces**
 
+### Database
+- **Supabase**
+- **Json**
+  
+### Hosting 
+- **Vercel**
+
 ---
 
 ## ⚠️ Challenges Faced
