@@ -25,7 +25,7 @@ export default function EmpathCore() {
 
             {view === "blog" && <BlogPage />}
 
-             {view === "Admin" && <AdminDashboard />}
+             {view === "admin" && <AdminDashboard />}
           </div>
         </div>
 
