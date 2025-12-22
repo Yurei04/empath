@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import LetterBubble from "../letter-comp/letter-bubble";
 
 /**
  * EmapthConversationScreen.jsx
@@ -52,7 +53,7 @@ function EmapthConversation({ messages, isLoading, sendMessage, suggestions, onI
                 Welcome to Empath AI
               </h2>
               <p className="text-yellow-600/70 text-sm sm:text-base max-w-md">
-                I'm here to listen and support you. Share what's on your mind.
+                I'm here to listen and support you. Share what&apos;s on your mind.
               </p>
             </div>
 
@@ -143,7 +144,11 @@ function EmapthConversation({ messages, isLoading, sendMessage, suggestions, onI
           >
             Send
           </button>
+          <div >
+            <LetterBubble />
+          </div>
         </div>
+        
       </div>
     </div>
   );
