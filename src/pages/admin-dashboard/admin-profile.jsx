@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabase"
-import EmpathAdminDashboard from "@/components/admin-comp/empath-admin-dashboard"
 import { Loader2 } from "lucide-react"
 import AdminDashboard from "@/components/admin-comp/admin-dashboard"
 
