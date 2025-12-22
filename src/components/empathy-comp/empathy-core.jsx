@@ -4,7 +4,8 @@ import React, { useState } from "react"
 import EmapthConversationScreen from "./empathy-screen"
 import HomepageMain from "@/pages/home-page/home-page-main"
 import LetterMain from "@/pages/empath-page/letter-main"
-import { MessageSquare, Mail, Home, Gamepad2 } from 'lucide-react'
+import { MessageSquare, Mail, Home, BookHeart } from 'lucide-react'
+import BlogPage from "@/pages/blog-page/blog-page"
 
 export default function EmpathCore() {
   const [view, setView] = useState("chat")
@@ -21,17 +22,7 @@ export default function EmpathCore() {
 
             {view === "home" && <HomepageMain />}
 
-            {view === "game" && (
-              <div className="flex h-full items-center justify-center text-yellow-300 text-xl">
-                🎮 Mini Game Coming Soon…
-              </div>
-            )}
-
-            {view === "music" && (
-              <div className="flex h-full items-center justify-center text-yellow-300 text-xl">
-                🎵 Music Mode Coming Soon…
-              </div>
-            )}
+            {view === "blog" && <BlogPage />}
           </div>
         </div>
 
@@ -40,9 +31,9 @@ export default function EmpathCore() {
           <NavButton icon={MessageSquare} label="Chat" active={view === "chat"} onClick={() => setView("chat")} />
           <NavButton icon={Mail} label="Letter" active={view === "letter"} onClick={() => setView("letter")} />
           <NavButton icon={Home} label="Home" active={view === "home"} onClick={() => setView("home")} />
-          <NavButton icon={Gamepad2} label="Game" active={view === "game"} onClick={() => setView("game")} />
+          <NavButton icon={BookHeart} label="Blog" active={view === "blog"} onClick={() => setView("blog")} />
         </div>
-        
+      
       </div>
     </div>
   )
