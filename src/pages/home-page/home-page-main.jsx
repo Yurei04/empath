@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { useState } from "react";
 
 export default function HomepageMain() {
@@ -58,8 +59,15 @@ export default function HomepageMain() {
               </div>
             </div>
 
-            <div className="relative w-56 h-56 sm:w-72 sm:h-72 lg:w-80 lg:h-80 rounded-full border-4 border-yellow-600 bg-gray-900 shadow-[0_0_25px_rgba(251,191,36,0.4)] flex items-center justify-center">
-              <span className="text-8xl">🫂</span>
+            <div className="relative w-56 h-56 sm:w-72 sm:h-72 lg:w-80 lg:h-80 rounded-full border-4 overflow-hidden border-yellow-600 bg-gray-900 shadow-[0_0_25px_rgba(251,191,36,0.4)] flex items-center justify-center">
+              <Image 
+              width={500}
+              height={500}
+              alt="Logo"
+              src={"/images/logo.png"}
+              className="w-full h-full"
+              />
+
             </div>
           </div>
         )}

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import LetterBubble from "../letter-comp/letter-bubble";
+import Image from "next/image";
 
 /**
  * EmapthConversationScreen.jsx
@@ -15,8 +16,14 @@ function EmapthConversation({ messages, isLoading, sendMessage, suggestions, onI
           
           {/* Left: Logo + Title */}
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-orange-600 to-yellow-500 rounded-full flex items-center justify-center text-2xl sm:text-3xl shadow-lg shadow-orange-500/30">
-              💬
+            <div className="overflow-hidden w-12 h-12 sm:w-14 sm:h-14 bg-gradient-to-br from-orange-600 to-yellow-500 rounded-full flex items-center justify-center text-2xl sm:text-3xl shadow-lg shadow-orange-500/30">
+                <Image 
+                  width={500}
+                  height={500}
+                  alt="Logo"
+                  src={"/images/logo.png"}
+                  className="w-full h-full"
+                />
             </div>
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-yellow-400">
@@ -46,14 +53,20 @@ function EmapthConversation({ messages, isLoading, sendMessage, suggestions, onI
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-6 px-4">
             <div className="text-center">
-              <div className="w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-orange-600 to-yellow-500 rounded-full flex items-center justify-center text-4xl sm:text-5xl mx-auto mb-4 shadow-xl shadow-orange-500/30">
-                🤝
+              <div className="overflow-hidden w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br from-orange-600 to-yellow-500 rounded-full flex items-center justify-center text-4xl sm:text-5xl mx-auto mb-4 shadow-xl shadow-orange-500/30">
+                  <Image 
+                    width={500}
+                    height={500}
+                    alt="Logo"
+                    src={"/images/logo.png"}
+                    className="w-full h-full"
+                    />
               </div>
               <h2 className="text-yellow-400 text-xl sm:text-2xl font-semibold mb-2">
                 Welcome to Empath AI
               </h2>
               <p className="text-yellow-600/70 text-sm sm:text-base max-w-md">
-                I'm here to listen and support you. Share what&apos;s on your mind.
+                I&apos;m here to listen and support you. Share what&apos;s on your mind.
               </p>
             </div>
 
