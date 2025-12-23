@@ -157,12 +157,13 @@ async function detectDistortions(text, threshold = 0.5, maxRetries = 2) {
 // ============================================
 
 const DISTORTION_SEVERITY_WEIGHTS = {
-  catastrophizing: 3.0,
-  overgeneralization: 2.5,
-  black_and_white: 2.0,
-  self_blame: 2.5,
-  mind_reading: 1.5,
+  catastrophizing: 0.85,      
+  self_blame: 0.75,         
+  overgeneralization: 0.65,  
+  black_and_white: 0.55,     
+  mind_reading: 0.45,      
 }
+
 
 // ============================================
 // COMBINED METRICS CALCULATION
@@ -170,40 +171,53 @@ const DISTORTION_SEVERITY_WEIGHTS = {
 
 function updateDistortionMetrics(session, distortionData) {
   const { distortions, has_distortions } = distortionData
-  
-  // Update recent distortions (keep last 5 messages)
   if (has_distortions) {
     session.distortionMetrics.recentDistortions.push({
       timestamp: Date.now(),
       distortions: distortions.map(d => d.distortion),
       count: distortions.length,
+      weightedScore: distortions.reduce((sum, d) => {
+        const weight = DISTORTION_SEVERITY_WEIGHTS[d.distortion] || 0.5
+        return sum + (d.confidence * weight)
+      }, 0)
     })
-    
-    // Keep only last 5
+
     if (session.distortionMetrics.recentDistortions.length > 5) {
       session.distortionMetrics.recentDistortions.shift()
     }
   }
-  
-  // Calculate total distortions
+
   session.distortionMetrics.totalDistortions += distortions.length
+
+  let rawLoad = 0
+  let maxPossibleLoad = 0
   
-  // Calculate cognitive load (0-100)
-  let cognitiveLoad = 0
   distortions.forEach(d => {
-    const weight = DISTORTION_SEVERITY_WEIGHTS[d.distortion] || 1.0
-    cognitiveLoad += d.confidence * weight * 20 // Scale to 0-100
+    const weight = DISTORTION_SEVERITY_WEIGHTS[d.distortion] || 0.5
+    rawLoad += d.confidence * weight
+    maxPossibleLoad += weight 
   })
-  session.distortionMetrics.cognitiveLoad = Math.min(100, cognitiveLoad)
-  
-  // Determine distortion trend
+
+  if (distortions.length > 0) {
+    const avgLoad = rawLoad / distortions.length
+
+    const countFactor = Math.log10(distortions.length + 1) / Math.log10(6)
+    
+    session.distortionMetrics.cognitiveLoad = Math.min(1.0, avgLoad * (1 + countFactor * 0.5))
+  } else {
+    session.distortionMetrics.cognitiveLoad = 0
+  }
+
   if (session.distortionMetrics.recentDistortions.length >= 3) {
     const recent = session.distortionMetrics.recentDistortions
-    const lastThree = recent.slice(-3).map(r => r.count)
+    const lastThree = recent.slice(-3).map(r => r.weightedScore || r.count)
+
+    const trend1 = lastThree[1] - lastThree[0]
+    const trend2 = lastThree[2] - lastThree[1]
     
-    if (lastThree[2] > lastThree[1] && lastThree[1] > lastThree[0]) {
+    if (trend1 > 0.1 && trend2 > 0.1) {
       session.distortionMetrics.distortionTrend = 'increasing'
-    } else if (lastThree[2] < lastThree[1] && lastThree[1] < lastThree[0]) {
+    } else if (trend1 < -0.1 && trend2 < -0.1) {
       session.distortionMetrics.distortionTrend = 'decreasing'
     } else {
       session.distortionMetrics.distortionTrend = 'stable'
@@ -223,38 +237,41 @@ function updateDistortionMetrics(session, distortionData) {
     .slice(0, 2)
     .map(([distortion]) => distortion)
 }
-
 function calculateCombinedSeverity(session) {
-  const emotionSeverity = session.emotionMetrics.severity 
-  const cognitiveLoad = session.distortionMetrics.cognitiveLoad 
+  const emotionSeverity = session.emotionMetrics.severity // 0-1 scale
+  const cognitiveLoad = session.distortionMetrics.cognitiveLoad // 0-1 scale
   const distortionTrend = session.distortionMetrics.distortionTrend
 
-  // Weighted percentage score
-  let combined =
-    (emotionSeverity * 0.6 + cognitiveLoad * 0.4) * 100
+  let combinedScore = (emotionSeverity * 0.70) + (cognitiveLoad * 0.30)
 
-  // Apply trend modifier
   if (distortionTrend === 'increasing') {
-    combined *= 1.2 // +20%
+    combinedScore *= 1.15 
   } else if (distortionTrend === 'decreasing') {
-    combined *= 0.9 // −10%
+    combinedScore *= 0.92 
   }
 
-  session.combinedSeverity = Math.min(100, Math.round(combined))
+  if (combinedScore > 0.7) {
+    combinedScore = 0.7 + (combinedScore - 0.7) * 1.2 
+  }
 
-  // Determine intervention level
+  session.combinedSeverity = Math.min(100, Math.round(combinedScore * 100))
+
   if (session.emotionMetrics.mode === 'crisis') {
     session.interventionLevel = 'crisis'
   } else if (
-    session.combinedSeverity >= 60 ||
-    distortionTrend === 'increasing'
+    session.combinedSeverity >= 70 ||
+    (distortionTrend === 'increasing' && session.combinedSeverity >= 55)
   ) {
     session.interventionLevel = 'intervene'
-  } else if (session.combinedSeverity >= 35) {
+  } else if (session.combinedSeverity >= 40) {
     session.interventionLevel = 'guide'
-  } else {
+  } else if (session.combinedSeverity >= 20) {
     session.interventionLevel = 'observe'
+  } else {
+    session.interventionLevel = 'observe' 
   }
+  
+  console.log(`📊 Severity Breakdown: Emotion=${(emotionSeverity*100).toFixed(1)}% | Cognitive=${(cognitiveLoad*100).toFixed(1)}% | Combined=${session.combinedSeverity}/100`)
 }
 
 
